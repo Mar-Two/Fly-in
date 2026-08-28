@@ -1,40 +1,6 @@
 from models import NbDrone, ZoneModel, ConnectionModel
 from pydantic import ValidationError
-import sys
-
-
-class Drone():
-    def _init_(self, name):
-        self.name = name
-
-
-class Zone():
-    def __init__(self, prefix: str, name: str,
-                 positionx: int, positiony: int,
-                 color=None, zone='normal', max_drones=1) -> None:
-        self.prefix = prefix
-        self.name = name
-        self.positionx = positionx
-        self.positiony = positiony
-        self.color = color
-        self.zone_type = zone
-        self.max_drones = max_drones
-
-
-class Connection():
-    def __init__(self, name_zone1: str, name_zone2: str,
-                 max_link_capacity=1) -> None:
-        self.name_zone1 = name_zone1
-        self.name_zone2 = name_zone2
-        self.max_link_capacity = max_link_capacity
-
-
-class Graph():
-    def __init__(self):
-        self.hub = []
-
-    def add_zone(self, zone: Zone):
-        self.hub.append(zone)
+from graph import Graph, Zone, Drone, Connection
 
 
 class ParseError(Exception):
@@ -46,22 +12,22 @@ class ParseError(Exception):
 
 
 class MapParser():
-    def __init__(self, name_file: str) -> None:
+    def __init__(self, name_file: str, graph: Graph) -> None:
+        self.graph = graph
         self.name_file = name_file
         self.parse_input_file(self.read_mapfile())
 
-    def read_mapfile(self) -> list:
+    def read_mapfile(self) -> list[str]:
         result = []
         try:
             with open(self.name_file, 'r') as map_file:
                 result = map_file.readlines()
         except (FileNotFoundError, PermissionError, IsADirectoryError) as e:
-            print(e)
-            sys.exit(1)
+            raise ParseError(None, str(e))
         return result
 
     @staticmethod
-    def parse_line_zone(value: list, prefix: str, i: int) -> dict:
+    def parse_line_zone(value: str, prefix: str, i: int) -> dict:
         result = {}
         all_value = value.rsplit('[', 1)
         each_value = all_value[0].split()
@@ -119,7 +85,7 @@ class MapParser():
             if not zone2:
                 raise ParseError(i + 1, "connection requires two zone names "
                                  "separated by '-'")
-            dict_connection = {'zone1': zone1.strip(), 'zone2': zone2.strip()}
+            dict_connection = {'name_zone1': zone1.strip(), 'name_zone2': zone2.strip()}
         else:
             raise ParseError(i + 1, f"'{prefix}' must be written as "
                              f"'{prefix}: <name_zone1>-<name_zone2> "
@@ -148,8 +114,7 @@ class MapParser():
                 dict_connection[k] = v
         return dict_connection
 
-    def parse_input_file(self, result: list) -> list:
-        name_zones = set()
+    def parse_input_file(self, result: list) -> None:
         starthub = False
         endhub = False
         nbdrone = False
@@ -176,6 +141,11 @@ class MapParser():
                         dict_nb_drones = {prefix: value}
                         NbDrone(**dict_nb_drones)
                         nbdrone = True
+                        for i in range(int(value)):
+                            drone = Drone()
+                            drone.id = i + 1
+                            drone.name = f"D{i + 1}"
+                            self.graph.add_drone(drone)
                     except ValidationError as e:
                         raise ParseError(i + 1, e.errors()[0]['msg'])
                 else:
@@ -193,13 +163,13 @@ class MapParser():
                         starthub_model = ZoneModel(**result_line)
                         dict_zone = starthub_model.model_dump()
                         zone = Zone(**dict_zone)
-                        if zone.name in name_zones:
-                            raise ParseError(i + 1, "Error")
-                        name_zones.add(zone.name)
-                        Graph().add_zone(zone)
+                        if zone.name in self.graph.zone:
+                            raise ParseError(i + 1, "duplicate zone name "
+                                             f"'{zone.name}'")
+                        self.graph.add_zone(zone, zone.name)
+                        self.graph.name_start = zone.name
                     except ValidationError as e:
-                        print(f"Error line {i + 1}:", e.errors()[0]['msg'])
-                        sys.exit(1)
+                        raise ParseError(i + 1, e.errors()[0]['msg'])
 
                 elif prefix == 'end_hub':
                     if endhub:
@@ -213,10 +183,11 @@ class MapParser():
                         endhub_model = ZoneModel(**result_line)
                         dict_zone = endhub_model.model_dump()
                         zone = Zone(**dict_zone)
-                        if zone.name in name_zones:
-                            raise ParseError(i + 1, "Error")
-                        name_zones.add(zone.name)
-                        Graph().add_zone(zone)
+                        if zone.name in self.graph.zone:
+                            raise ParseError(i + 1, "duplicate zone name "
+                                             f"'{zone.name}'")
+                        self.graph.add_zone(zone, zone.name)
+                        self.graph.name_end = zone.name
                     except ValidationError as e:
                         raise ParseError(i + 1, e.errors()[0]['msg'])
 
@@ -227,40 +198,43 @@ class MapParser():
                         hub_model = ZoneModel(**result_line)
                         dict_zone = hub_model.model_dump()
                         zone = Zone(**dict_zone)
-                        if zone.name in name_zones:
-                            raise ParseError(i + 1, "Error")
-                        name_zones.add(zone.name)
-                        Graph().add_zone(zone)
+                        if zone.name in self.graph.zone:
+                            raise ParseError(i + 1, "duplicate zone name "
+                                             f"'{zone.name}'")
+                        self.graph.add_zone(zone, zone.name)
                     except ValidationError as e:
                         raise ParseError(i + 1, e.errors()[0]['msg'])
 
                 elif prefix == 'connection':
                     result_line = self.parse_line_connection(value, prefix, i)
                     try:
-                        if result_line['zone1'] not in name_zones:
+                        if result_line['name_zone1'] not in self.graph.zone:
                             raise ParseError(i + 1, "unknown zone "
                                              f"'{result_line['zone1']}': "
                                              "zones must be defined before "
                                              "being used in a connection")
-                        elif result_line['zone2'] not in name_zones:
+                        elif result_line['name_zone2'] not in self.graph.zone:
                             raise ParseError(i + 1, "unknown zone "
                                              f"'{result_line['zone2']}': "
                                              "zones must be defined before "
                                              "being used in a connection")
                         else:
-                            if ((result_line['zone1'], result_line['zone2'])
-                               in seen or (result_line['zone2'],
-                                           result_line['zone1']) in seen):
+                            if ((result_line['name_zone1'], result_line['name_zone2'])
+                               in seen or (result_line['name_zone2'],
+                                           result_line['name_zone1']) in seen):
                                 raise ParseError(i + 1, "duplicate connection "
-                                                 f"'{result_line['zone1']}-"
-                                                 f"{result_line['zone2']}'")
-                            seen.add((result_line['zone1'],
-                                      result_line['zone2']))
+                                                 f"'{result_line['name_zone1']}-"
+                                                 f"{result_line['name_zone2']}'")
+                            seen.add((result_line['name_zone1'],
+                                      result_line['name_zone2']))
                             connection_model = ConnectionModel(**result_line)
+                            dict_connection = connection_model.model_dump()
+                            cnx = Connection(**dict_connection)
+                            self.graph.add_connection(cnx)
                     except ValidationError as e:
                         raise ParseError(i + 1, e.errors()[0]['msg'])
                 else:
-                    raise ParseError(i + 1, f"Error line {i + 1}: unknown "
+                    raise ParseError(i + 1, f": unknown "
                                      f"prefix '{prefix}':"
                                      " only 'nb_drones', 'start_hub', "
                                      "'end_hub', "
@@ -274,7 +248,3 @@ class MapParser():
         if not endhub:
             raise ParseError(None, "missing 'end_hub': exactly one end_hub"
                              " is required")
-
-
-MapParser('map.txt')
-

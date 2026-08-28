@@ -46,6 +46,6 @@ class ZoneModel(BaseModel):
 
 
 class ConnectionModel(BaseModel):
-    zone1: str
-    zone2: str
+    name_zone1: str
+    name_zone2: str
     max_link_capacity: int = Field(gt=0, default=1)
