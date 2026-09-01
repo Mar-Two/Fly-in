@@ -15,7 +15,6 @@ class MapParser():
     def __init__(self, name_file: str, graph: Graph) -> None:
         self.graph = graph
         self.name_file = name_file
-        self.parse_input_file(self.read_mapfile())
 
     def read_mapfile(self) -> list[str]:
         result = []
@@ -206,16 +205,22 @@ class MapParser():
                         raise ParseError(i + 1, e.errors()[0]['msg'])
 
                 elif prefix == 'connection':
+                    if not starthub:
+                        raise ParseError(None, "missing 'start_hub': exactly one start_hub"
+                                         " is required")
+                    if not endhub:
+                        raise ParseError(None, "missing 'end_hub': exactly one end_hub"
+                                         " is required")
                     result_line = self.parse_line_connection(value, prefix, i)
                     try:
                         if result_line['name_zone1'] not in self.graph.zone:
                             raise ParseError(i + 1, "unknown zone "
-                                             f"'{result_line['zone1']}': "
+                                             f"'{result_line['name_zone1']}': "
                                              "zones must be defined before "
                                              "being used in a connection")
                         elif result_line['name_zone2'] not in self.graph.zone:
                             raise ParseError(i + 1, "unknown zone "
-                                             f"'{result_line['zone2']}': "
+                                             f"'{result_line['name_zone2']}': "
                                              "zones must be defined before "
                                              "being used in a connection")
                         else:

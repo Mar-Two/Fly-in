@@ -1,4 +1,4 @@
-from models import PrefixZone, TypeZone
+from models import TypeZone
 import heapq as hp
 
 
@@ -93,3 +93,68 @@ class Graph():
                     previous[neighbor] = u
                     hp.heappush(heap, (candidat, neighbor))
         return (previous, dist)
+
+    def all_delivered(self):
+        for drone in self.drones:
+            if drone.state != self.name_end:
+                return False
+        return True
+
+    def arrived_in_zone(self, short_path) -> dict:
+        result = {}
+        for drone in self.drones:
+            key = self.name_end
+            result[(drone.name, key)] = 0
+            while key != self.name_start:
+                result[(drone.name, short_path[key])] = 0
+                key = short_path[key]
+        return result
+
+    def motor(self):
+        self.zone_de_depart()
+        previous, dist = self.shortest_paths()
+        tour = 1
+        test = self.arrived_in_zone(previous)
+        rev_previous = {}
+        while not self.all_delivered():
+            key = self.name_end
+            rev_previous = {}
+            display = []
+            # Boucle qui parcours les zones de bas en haut
+            while key != self.name_start:
+                result = []
+                lstzone = [key, previous[key]]
+                name_sort = sorted(lstzone)
+                # Verifiction la capité des zones et du max_link si des drones se trouve dans la zone precedente je les ajoute a une list
+                if (not self.zone[key].max_drones or (self.zone[key].accumulator < self.zone[key].max_drones)) and self.connections[tuple(name_sort)].accumulator < self.connections[tuple(name_sort)].max_link_capacity:
+                    for drone in self.drones:
+                        if drone.state == previous[key]:
+                            result.append(drone)
+                rev_previous[previous[key]] = key
+                key = previous[key]
+                # si result est pas vide et les conditions de la zone ou aller sont favorable je push le premier drone de la list j'incremente la capacité de la zone ou il vas je decrment la capacité de la zone ou il sort j'incremente la capacite du lien
+                while result and (not self.zone[rev_previous[key]].max_drones or (self.zone[rev_previous[key]].accumulator < self.zone[rev_previous[key]].max_drones)) and (self.connections[tuple(name_sort)].accumulator < self.connections[tuple(name_sort)].max_link_capacity):
+                    drone = result.pop(0)
+                    if test[(drone.name, rev_previous[key])] + 1 == self.movement_cost(self.zone[rev_previous[key]].zone_type):
+                        if self.zone[key].max_drones:
+                            self.zone[key].accumulator -= 1
+                        drone.state = rev_previous[key]
+                        display.append(f"{drone.name}-{drone.state}")
+                        self.zone[rev_previous[key]].accumulator += 1
+                        self.connections[tuple(name_sort)].accumulator += 1
+                    else:
+                        display.append(f"{drone.name}-<{drone.state}-{rev_previous[key]}>")
+                        test[(drone.name, rev_previous[key])] += 1
+                        self.connections[tuple(name_sort)].accumulator += 1
+            print(f"{tour}: {" ".join(display)}")
+            """
+            for d in graph.drones:
+                print(f"{tour + 1}: {d.state}")
+            """
+            # Lien de toutes les connexions remis a zero
+            while key != self.name_end:
+                lstzone = [key, rev_previous[key]]
+                name_sort = sorted(lstzone)
+                self.connections[tuple(name_sort)].accumulator = 0
+                key = rev_previous[key]
+            tour += 1
