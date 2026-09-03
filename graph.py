@@ -1,12 +1,21 @@
 from models import TypeZone
 import heapq as hp
-
+import math
 
 class Drone():
     def _init_(self, name, id):
         self.name = name
         self.id = id
         self.state = ""
+        self.nbtour = 0
+
+
+class Path():
+    def __init__(self, path):
+        self.path = path
+        self.nbtours = 0
+        self.debit = 0
+        self.drones = []
 
 
 class Zone():
@@ -110,9 +119,98 @@ class Graph():
                 key = short_path[key]
         return result
 
+    def count_priority_zone(self, paths: list[dict]):
+        pass
+
     def motor(self):
         self.zone_de_depart()
+        list_chemin = []
+        path1 = []
+        critique = []
+        noncritique = []
+        d = {}
+        while True:
+            # Construction des differents chemin 
+            critique = []
+            noncritique = []
+            for p in path1:
+                if p not in d:
+                    d[p] = self.zone[p].zone_type
+                zone_type = self.zone[p].zone_type
+                self.zone[p].zone_type = TypeZone.BLOCKED
+                previous, dist = self.shortest_paths()
+                if dist[self.name_end] == float('inf'):
+                    critique.append(p)
+                else:
+                    noncritique.append(p)
+                self.zone[p].zone_type = zone_type
+            for zone in noncritique:
+                self.zone[zone].zone_type = TypeZone.BLOCKED
+            previous, dist = self.shortest_paths()
+            if dist[self.name_end] != float('inf'):
+                key = self.name_end
+                res = {}
+                while key != self.name_start:
+                    res[key] = previous[key]
+                    key = previous[key]
+                same = True
+                for k, v in res.items():
+                    if k != self.name_start and k != self.name_end and k not in path1:
+                        path1.append(k)
+                        same = False
+                    elif v != self.name_start and v != self.name_end and v not in path1:
+                        path1.append(v)
+                        same = False
+                if same:
+                    break
+                actual_path = Path(res)
+                actual_path.nbtours = dist[self.name_end]
+                list_chemin.append(actual_path)
+            else:
+                break
+        for k, v in d.items():
+            self.zone[k].zone_type = v
+
+        # Debit du chemin
+        for lst in list_chemin:
+            debit_chemin = None
+            for d, v in lst.path.items():
+                lstzone = [d, v]
+                trie = sorted(lstzone)
+                # capacite du lien
+                capacitelien = self.connections[tuple(trie)].max_link_capacity
+                if self.zone[d].zone_type == TypeZone.RESTRICTED:
+                    capacitelien /= 2
+                # capacite de la zone1
+                if not self.zone[v].max_drones:
+                    capacitezone1 = float('inf')
+                else:
+                    capacitezone1 = self.zone[v].max_drones
+                # capacite de la zone2
+                if not self.zone[d].max_drones:
+                    capacitezone2 = float('inf')
+                else:
+                    capacitezone2 = self.zone[d].max_drones
+                mini = min([capacitelien, capacitezone1, capacitezone2])
+                if not debit_chemin or debit_chemin > mini:
+                    debit_chemin = mini
+                lst.debit = debit_chemin
+        for drone in self.drones:
+            list = []
+            for lst in list_chemin:
+                list.append((lst, math.ceil(lst.nbtours + (len(lst.drones) / lst.debit))))
+            list, tour = min(list, key=lambda x: x[1])
+            list.drones.append(drone)
+        i = 1
+        for lst in list_chemin:
+            print(f"Path{i}: {lst.path}")
+            for drone in lst.drones:
+                print(f"{drone.name}")
+            i += 1
+        return
+        # Simulation 
         previous, dist = self.shortest_paths()
+        print(dist)
         tour = 1
         test = self.arrived_in_zone(previous)
         rev_previous = {}
@@ -147,10 +245,7 @@ class Graph():
                         test[(drone.name, rev_previous[key])] += 1
                         self.connections[tuple(name_sort)].accumulator += 1
             print(f"{tour}: {" ".join(display)}")
-            """
-            for d in graph.drones:
-                print(f"{tour + 1}: {d.state}")
-            """
+
             # Lien de toutes les connexions remis a zero
             while key != self.name_end:
                 lstzone = [key, rev_previous[key]]
