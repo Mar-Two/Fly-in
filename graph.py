@@ -2,17 +2,21 @@ from models import TypeZone
 import heapq as hp
 import math
 
+
 class Drone():
-    def _init_(self, name, id):
+    def __init__(self, name, id):
         self.name = name
         self.id = id
         self.state = ""
         self.nbtour = 0
+        self.action = False
+        self.path = {}
 
 
 class Path():
     def __init__(self, path):
         self.path = path
+        self.id = 0
         self.nbtours = 0
         self.debit = 0
         self.drones = []
@@ -82,6 +86,7 @@ class Graph():
 
     def shortest_paths(self) -> list:
         dist = {k: float('inf') for k in self.zone}
+        nb_prio = {k: 0 for k in self.zone}
         dist[self.name_start] = 0
         heap = [(0, self.name_start)]
         visited = set()
@@ -96,11 +101,20 @@ class Graph():
                 value = self.movement_cost(self.zone[neighbor].zone_type)
                 if value == -1:
                     continue
+                if self.zone[neighbor].zone_type == TypeZone.PRIORITY:
+                    nb_priority = nb_prio[u] + 1
+                else:
+                    nb_priority = nb_prio[u]
                 candidat = dist[u] + value
                 if candidat < dist[neighbor]:
                     dist[neighbor] = candidat
+                    nb_prio[neighbor] = nb_priority
                     previous[neighbor] = u
                     hp.heappush(heap, (candidat, neighbor))
+                elif candidat == dist[neighbor]:
+                    if nb_priority > nb_prio[neighbor]:
+                        previous[neighbor] = u
+                        nb_prio[neighbor] = nb_priority
         return (previous, dist)
 
     def all_delivered(self):
@@ -109,18 +123,14 @@ class Graph():
                 return False
         return True
 
-    def arrived_in_zone(self, short_path) -> dict:
+    def arrived_in_zone(self, list_chemin) -> dict:
         result = {}
-        for drone in self.drones:
-            key = self.name_end
-            result[(drone.name, key)] = 0
-            while key != self.name_start:
-                result[(drone.name, short_path[key])] = 0
-                key = short_path[key]
+        for lst in list_chemin:
+            for drone in lst.drones:
+                for d, v in lst.path.items():
+                    result[(drone.name, d)] = 0
+                    result[(drone.name, v)] = 0
         return result
-
-    def count_priority_zone(self, paths: list[dict]):
-        pass
 
     def motor(self):
         self.zone_de_depart()
@@ -129,8 +139,9 @@ class Graph():
         critique = []
         noncritique = []
         d = {}
+        idpath = 1
         while True:
-            # Construction des differents chemin 
+            # Construction des differents chemin
             critique = []
             noncritique = []
             for p in path1:
@@ -164,10 +175,13 @@ class Graph():
                 if same:
                     break
                 actual_path = Path(res)
+                actual_path.id = idpath
                 actual_path.nbtours = dist[self.name_end]
                 list_chemin.append(actual_path)
+                idpath += 1
             else:
                 break
+
         for k, v in d.items():
             self.zone[k].zone_type = v
 
@@ -195,61 +209,62 @@ class Graph():
                 if not debit_chemin or debit_chemin > mini:
                     debit_chemin = mini
                 lst.debit = debit_chemin
+
         for drone in self.drones:
-            list = []
+            estimates = []
             for lst in list_chemin:
-                list.append((lst, math.ceil(lst.nbtours + (len(lst.drones) / lst.debit))))
-            list, tour = min(list, key=lambda x: x[1])
-            list.drones.append(drone)
-        i = 1
+                estimates.append((lst, math.ceil(lst.nbtours + (len(lst.drones) / lst.debit))))
+            best_path, tour = min(estimates, key=lambda x: x[1])
+            drone.nbtour = tour
+            best_path.drones.append(drone)
+
         for lst in list_chemin:
-            print(f"Path{i}: {lst.path}")
             for drone in lst.drones:
-                print(f"{drone.name}")
-            i += 1
-        return
-        # Simulation 
-        previous, dist = self.shortest_paths()
-        print(dist)
+                drone.path = lst.path
+
+        # Simulation
         tour = 1
-        test = self.arrived_in_zone(previous)
-        rev_previous = {}
+        test = self.arrived_in_zone(list_chemin)
         while not self.all_delivered():
-            key = self.name_end
-            rev_previous = {}
             display = []
             # Boucle qui parcours les zones de bas en haut
-            while key != self.name_start:
-                result = []
-                lstzone = [key, previous[key]]
-                name_sort = sorted(lstzone)
-                # Verifiction la capité des zones et du max_link si des drones se trouve dans la zone precedente je les ajoute a une list
-                if (not self.zone[key].max_drones or (self.zone[key].accumulator < self.zone[key].max_drones)) and self.connections[tuple(name_sort)].accumulator < self.connections[tuple(name_sort)].max_link_capacity:
-                    for drone in self.drones:
-                        if drone.state == previous[key]:
-                            result.append(drone)
-                rev_previous[previous[key]] = key
-                key = previous[key]
-                # si result est pas vide et les conditions de la zone ou aller sont favorable je push le premier drone de la list j'incremente la capacité de la zone ou il vas je decrment la capacité de la zone ou il sort j'incremente la capacite du lien
-                while result and (not self.zone[rev_previous[key]].max_drones or (self.zone[rev_previous[key]].accumulator < self.zone[rev_previous[key]].max_drones)) and (self.connections[tuple(name_sort)].accumulator < self.connections[tuple(name_sort)].max_link_capacity):
-                    drone = result.pop(0)
-                    if test[(drone.name, rev_previous[key])] + 1 == self.movement_cost(self.zone[rev_previous[key]].zone_type):
-                        if self.zone[key].max_drones:
-                            self.zone[key].accumulator -= 1
-                        drone.state = rev_previous[key]
-                        display.append(f"{drone.name}-{drone.state}")
-                        self.zone[rev_previous[key]].accumulator += 1
-                        self.connections[tuple(name_sort)].accumulator += 1
-                    else:
-                        display.append(f"{drone.name}-<{drone.state}-{rev_previous[key]}>")
-                        test[(drone.name, rev_previous[key])] += 1
-                        self.connections[tuple(name_sort)].accumulator += 1
-            print(f"{tour}: {" ".join(display)}")
+            for lst in list_chemin:
+                for k, v in lst.path.items():
+                    result = []
+                    lstzone = [k, v]
+                    name_sort = sorted(lstzone)
+                    # Verifiction la capité des zones et du max_link si des drones se trouve dans la zone precedente je les ajoute a une list
+                    if (not self.zone[k].max_drones or (self.zone[k].accumulator < self.zone[k].max_drones)) and self.connections[tuple(name_sort)].accumulator < self.connections[tuple(name_sort)].max_link_capacity:
+                        for drone in self.drones:
+                            if k in drone.path:
+                                if drone.path[k] == v:
+                                    if drone.state == v:
+                                        result.append(drone)
+                    result = sorted(result, key=lambda x: x.nbtour, reverse=True)
 
+                    # si result est pas vide et les conditions de la zone ou aller sont favorable je push le premier drone de la list j'incremente la capacité de la zone ou il vas je decrment la capacité de la zone ou il sort j'incremente la capacite du lien
+                    while result and (not self.zone[k].max_drones or (self.zone[k].accumulator < self.zone[k].max_drones)) and (self.connections[tuple(name_sort)].accumulator < self.connections[tuple(name_sort)].max_link_capacity):
+                        drone = result.pop(0)
+                        if not drone.action:
+                            if test[(drone.name, k)] + 1 == self.movement_cost(self.zone[k].zone_type):
+                                if self.zone[v].max_drones:
+                                    self.zone[v].accumulator -= 1
+                                drone.state = k
+                                display.append(f"{drone.name}-{drone.state}")
+                                self.zone[k].accumulator += 1
+                                self.connections[tuple(name_sort)].accumulator += 1
+                            else:
+                                display.append(f"{drone.name}-<{drone.state}-{k}>")
+                                test[(drone.name, k)] += 1
+                                self.connections[tuple(name_sort)].accumulator += 1
+                            drone.action = True
+            print(f"{tour}: {" ".join(display)}")
             # Lien de toutes les connexions remis a zero
-            while key != self.name_end:
-                lstzone = [key, rev_previous[key]]
-                name_sort = sorted(lstzone)
-                self.connections[tuple(name_sort)].accumulator = 0
-                key = rev_previous[key]
+            for lst in list_chemin:
+                for k, v in lst.path.items():
+                    lstzone = [k, v]
+                    name_sort = sorted(lstzone)
+                    self.connections[tuple(name_sort)].accumulator = 0
+            for drone in self.drones:
+                drone.action = False
             tour += 1

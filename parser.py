@@ -84,7 +84,8 @@ class MapParser():
             if not zone2:
                 raise ParseError(i + 1, "connection requires two zone names "
                                  "separated by '-'")
-            dict_connection = {'name_zone1': zone1.strip(), 'name_zone2': zone2.strip()}
+            dict_connection = {'name_zone1': zone1.strip(),
+                               'name_zone2': zone2.strip()}
         else:
             raise ParseError(i + 1, f"'{prefix}' must be written as "
                              f"'{prefix}: <name_zone1>-<name_zone2> "
@@ -113,14 +114,14 @@ class MapParser():
                 dict_connection[k] = v
         return dict_connection
 
-    def parse_input_file(self, result: list) -> None:
+    def parse_input_file(self, file: list) -> None:
         starthub = False
         endhub = False
         nbdrone = False
         count_line = 0
         seen: set = set()
 
-        for i, res in enumerate(result):
+        for i, res in enumerate(file):
             if res.strip().startswith('#'):
                 continue
             line = res.strip().split(':', 1)
@@ -141,9 +142,7 @@ class MapParser():
                         NbDrone(**dict_nb_drones)
                         nbdrone = True
                         for i in range(int(value)):
-                            drone = Drone()
-                            drone.id = i + 1
-                            drone.name = f"D{i + 1}"
+                            drone = Drone(f"D{i + 1}", i + 1)
                             self.graph.add_drone(drone)
                     except ValidationError as e:
                         raise ParseError(i + 1, e.errors()[0]['msg'])
@@ -157,9 +156,9 @@ class MapParser():
                                          "exactly one start_hub is allowed")
                     else:
                         starthub = True
-                    result_line = self.parse_line_zone(value, prefix, i)
+                    result = self.parse_line_zone(value, prefix, i)
                     try:
-                        starthub_model = ZoneModel(**result_line)
+                        starthub_model = ZoneModel(**result)
                         dict_zone = starthub_model.model_dump()
                         zone = Zone(**dict_zone)
                         if zone.name in self.graph.zone:
@@ -177,9 +176,9 @@ class MapParser():
                     else:
                         endhub = True
 
-                    result_line = self.parse_line_zone(value, prefix, i)
+                    result = self.parse_line_zone(value, prefix, i)
                     try:
-                        endhub_model = ZoneModel(**result_line)
+                        endhub_model = ZoneModel(**result)
                         dict_zone = endhub_model.model_dump()
                         zone = Zone(**dict_zone)
                         if zone.name in self.graph.zone:
@@ -192,9 +191,9 @@ class MapParser():
 
                 elif prefix == 'hub':
 
-                    result_line = self.parse_line_zone(value, prefix, i)
+                    result = self.parse_line_zone(value, prefix, i)
                     try:
-                        hub_model = ZoneModel(**result_line)
+                        hub_model = ZoneModel(**result)
                         dict_zone = hub_model.model_dump()
                         zone = Zone(**dict_zone)
                         if zone.name in self.graph.zone:
@@ -206,33 +205,37 @@ class MapParser():
 
                 elif prefix == 'connection':
                     if not starthub:
-                        raise ParseError(None, "missing 'start_hub': exactly one start_hub"
+                        raise ParseError(None, "missing 'start_hub': "
+                                         "exactly one start_hub"
                                          " is required")
                     if not endhub:
-                        raise ParseError(None, "missing 'end_hub': exactly one end_hub"
+                        raise ParseError(None, "missing 'end_hub': exactly "
+                                         "one end_hub"
                                          " is required")
-                    result_line = self.parse_line_connection(value, prefix, i)
+                    result = self.parse_line_connection(value, prefix, i)
                     try:
-                        if result_line['name_zone1'] not in self.graph.zone:
+                        if result['name_zone1'] not in self.graph.zone:
                             raise ParseError(i + 1, "unknown zone "
-                                             f"'{result_line['name_zone1']}': "
+                                             f"'{result['name_zone1']}': "
                                              "zones must be defined before "
                                              "being used in a connection")
-                        elif result_line['name_zone2'] not in self.graph.zone:
+                        elif result['name_zone2'] not in self.graph.zone:
                             raise ParseError(i + 1, "unknown zone "
-                                             f"'{result_line['name_zone2']}': "
+                                             f"'{result['name_zone2']}': "
                                              "zones must be defined before "
                                              "being used in a connection")
                         else:
-                            if ((result_line['name_zone1'], result_line['name_zone2'])
-                               in seen or (result_line['name_zone2'],
-                                           result_line['name_zone1']) in seen):
+                            if ((result['name_zone1'],
+                                 result['name_zone2'])
+                               in seen or (result['name_zone2'],
+                                           result['name_zone1']) in seen):
                                 raise ParseError(i + 1, "duplicate connection "
-                                                 f"'{result_line['name_zone1']}-"
-                                                 f"{result_line['name_zone2']}'")
-                            seen.add((result_line['name_zone1'],
-                                      result_line['name_zone2']))
-                            connection_model = ConnectionModel(**result_line)
+                                                 f"'{result['name_zone1']}"
+                                                 "-"
+                                                 f"{result['name_zone2']}'")
+                            seen.add((result['name_zone1'],
+                                      result['name_zone2']))
+                            connection_model = ConnectionModel(**result)
                             dict_connection = connection_model.model_dump()
                             cnx = Connection(**dict_connection)
                             self.graph.add_connection(cnx)
