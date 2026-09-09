@@ -1,4 +1,4 @@
-from models import TypeZone
+from models import TypeZone, PrefixZone
 import heapq as hp
 import math
 
@@ -8,6 +8,7 @@ class Drone():
         self.name = name
         self.id = id
         self.state = ""
+        self.transit = None
         self.nbtour = 0
         self.action = False
         self.path = {}
@@ -20,6 +21,7 @@ class Path():
         self.nbtours = 0
         self.debit = 0
         self.drones = []
+        self.orderzone = {}
 
 
 class Zone():
@@ -46,19 +48,98 @@ class Connection():
         self.accumulator = 0
 
 
-class Graph():
+class Visual():
     def __init__(self):
+        self.color = {'green': 40,
+                      'white': 15,
+                      'yellow': 226,
+                      'red': 196,
+                      'blue': 21,
+                      'orange': 214,
+                      'gray': 249,
+                      'purple': 129,
+                      'black': 0,
+                      'brown': 52,
+                      'maroon': 1,
+                      'gold': 220,
+                      'cyan': 51,
+                      'magenta': 201,
+                      'crimson': 88,
+                      'violet': 177,
+                      'lime': 83,
+                      'darkred': 124
+                      }
+        self.zonescolor = {}
+
+    def listzonepath(self, path):
+        list_zones = []
+        for d, v in path.items():
+            if d not in list_zones:
+                list_zones.append(d)
+            if v not in list_zones:
+                list_zones.append(v)
+        return list_zones[::-1]
+
+    def listcnxpath(self, path):
+        result = []
+        for i in range(len(path) - 1):
+            result.append(f"{path[i], path[i + 1]}")
+        return result
+
+    def diplay_chemin(self, path, zones, drones, name_end):
+        displaay = []
+        for zone in path:
+            list_drones = []
+            list_transit = []
+            for drone in drones:
+                if drone.state == zone and not drone.transit:
+                    if not drone.action and drone.state != name_end:
+                        list_drones.append(f"{drone.name}*")
+                    else:
+                        list_drones.append(drone.name)
+                elif drone.transit == zone:
+                    if not drone.action:
+                        list_transit.append(f"{drone.name}*")
+                    else:
+                        list_transit.append(drone.name)
+
+            if zones[zone].prefix == PrefixZone.STARTHUB:
+                string = f"{self.zonescolor[zone]}[{len(list_drones)}]"
+            elif zones[zone].prefix == PrefixZone.ENDHUB:
+                string = f"-{",".join(list_transit)}> {self.zonescolor[zone]}[{len(list_drones)}]"
+            else:
+                string = f"-{",".join(list_transit)}> {self.zonescolor[zone]}[{zones[zone].accumulator}/{zones[zone].max_drones}]{",".join(list_drones)}"
+            displaay.append(string)
+        return " ".join(displaay)
+
+    def display(self, tour, path, zones, drones, name_end):
+        print(f"Turn: {tour}")
+        print("----------------------------------------------")
+        for p in path:
+            print(f"Path {p.id} (cost {p.nbtours}, throughput {p.debit})")
+            listzone = self.listzonepath(p.path)
+            print(" ", self.diplay_chemin(listzone, zones, drones, name_end))
+        print()
+
+
+class Graph():
+    def __init__(self, visual: Visual):
         self.zone = {}
         self.connections = {}
         self.name_start = ""
         self.name_end = ""
         self.drones = []
+        self.visual = visual
 
     def add_drone(self, drone: Drone):
         self.drones.append(drone)
 
     def add_zone(self, zone: Zone, name_zone):
         self.zone[name_zone] = zone
+        if self.zone[name_zone].color in self.visual.color:
+            self.visual.zonescolor[name_zone] = f"\033[38;5;{self.visual.color[self.zone[name_zone].color]}m{name_zone}\033[0m"
+        else:
+            self.visual.zonescolor[name_zone] = f"\033[38;5;188m{name_zone}\033[0m"
 
     def add_connection(self, connection: Connection):
         self.zone[connection.name_zone1].neighbors.append(
@@ -182,6 +263,9 @@ class Graph():
             else:
                 break
 
+        if not list_chemin:
+            raise ValueError("C'est haaaar")
+
         for k, v in d.items():
             self.zone[k].zone_type = v
 
@@ -221,7 +305,6 @@ class Graph():
         for lst in list_chemin:
             for drone in lst.drones:
                 drone.path = lst.path
-
         # Simulation
         tour = 1
         test = self.arrived_in_zone(list_chemin)
@@ -238,7 +321,7 @@ class Graph():
                         for drone in self.drones:
                             if k in drone.path:
                                 if drone.path[k] == v:
-                                    if drone.state == v:
+                                    if drone.state == v or drone.transit == k:
                                         result.append(drone)
                     result = sorted(result, key=lambda x: x.nbtour, reverse=True)
 
@@ -247,18 +330,26 @@ class Graph():
                         drone = result.pop(0)
                         if not drone.action:
                             if test[(drone.name, k)] + 1 == self.movement_cost(self.zone[k].zone_type):
-                                if self.zone[v].max_drones:
+                                if not drone.transit and self.zone[v].max_drones:
                                     self.zone[v].accumulator -= 1
                                 drone.state = k
+                                drone.transit = None
                                 display.append(f"{drone.name}-{drone.state}")
                                 self.zone[k].accumulator += 1
                                 self.connections[tuple(name_sort)].accumulator += 1
                             else:
+                                if self.zone[v].max_drones:
+                                    self.zone[v].accumulator -= 1
+                                drone.state = ""
+                                drone.transit = k
                                 display.append(f"{drone.name}-<{drone.state}-{k}>")
                                 test[(drone.name, k)] += 1
                                 self.connections[tuple(name_sort)].accumulator += 1
                             drone.action = True
+            """
             print(f"{tour}: {" ".join(display)}")
+            """
+            self.visual.display(tour, list_chemin, self.zone, self.drones, self.name_end)
             # Lien de toutes les connexions remis a zero
             for lst in list_chemin:
                 for k, v in lst.path.items():
