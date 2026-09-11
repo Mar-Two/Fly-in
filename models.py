@@ -1,4 +1,4 @@
-from pydantic import BaseModel, Field, model_validator, ConfigDict
+from pydantic import BaseModel, Field, model_validator
 from typing_extensions import Self
 from enum import Enum
 

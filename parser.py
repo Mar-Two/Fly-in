@@ -1,6 +1,6 @@
 from models import NbDrone, ZoneModel, ConnectionModel
 from pydantic import ValidationError
-from graph import Graph, Zone, Drone, Connection
+from graph import Simulation, Zone, Drone, Connection
 
 
 class ParseError(Exception):
@@ -12,8 +12,8 @@ class ParseError(Exception):
 
 
 class MapParser():
-    def __init__(self, name_file: str, graph: Graph) -> None:
-        self.graph = graph
+    def __init__(self, name_file: str, simulation: Simulation) -> None:
+        self.graph = simulation
         self.name_file = name_file
 
     def read_mapfile(self) -> list[str]:
@@ -41,7 +41,7 @@ class MapParser():
                 i + 1,
                 f"'{prefix}' must be written as "
                 f"'{prefix}: <name '-' and ' ' is forbidden> <int(x)> <int(y)>"
-                " metadata]'"
+                " [metadata]'"
                 )
 
         if len(all_value) == 2:
