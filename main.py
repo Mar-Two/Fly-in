@@ -1,10 +1,12 @@
-from parser import MapParser, ParseError
-from graph import Simulation, Visual, NotPath
+from map_parser import MapParser, ParseError
+from simulation import Simulation, NoPathFound
+from visual import Visual
 import sys
 
 if __name__ == "__main__":
     visual = Visual()
     simulation = Simulation(visual)
+
     try:
         parser = MapParser('map.txt', simulation)
         parser.parse_input_file(parser.read_mapfile())
@@ -14,6 +16,6 @@ if __name__ == "__main__":
 
     try:
         simulation.simulation()
-    except NotPath as e:
+    except NoPathFound as e:
         print(e)
         sys.exit(1)

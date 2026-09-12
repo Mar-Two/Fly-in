@@ -1,10 +1,21 @@
 from models import NbDrone, ZoneModel, ConnectionModel
 from pydantic import ValidationError
-from graph import Simulation, Zone, Drone, Connection
+from structures import Zone, Drone, Connection
+from simulation import Simulation
 
 
 class ParseError(Exception):
+    """
+    Parsing error carrying the line number and its cause.
+    """
     def __init__(self, line: int | None, cause: str) -> None:
+        """
+        Build the formatted error message.
+
+        Args:
+            line: line number
+            cause: error message
+        """
         self.line = line
         self.cause = cause
         msg = f"Error line {line}: {cause}" if line else f"Error: {cause}"
@@ -12,11 +23,27 @@ class ParseError(Exception):
 
 
 class MapParser():
+    """
+    Parse a map file into a Simulation.
+    """
     def __init__(self, name_file: str, simulation: Simulation) -> None:
+        """
+        Construct MapParser.
+
+        Args:
+            name_file: name of the file
+            simulation: simulation instance to populate
+        """
         self.graph = simulation
         self.name_file = name_file
 
     def read_mapfile(self) -> list[str]:
+        """
+        Read the map file
+
+        Returns:
+            The lines of the map file.
+        """
         result = []
         try:
             with open(self.name_file, 'r') as map_file:
@@ -27,6 +54,17 @@ class MapParser():
 
     @staticmethod
     def parse_line_zone(value: str, prefix: str, i: int) -> dict:
+        """
+        Parse and validate a zone line.
+
+        Args:
+            value: the line content without the prefix
+            prefix: start_hub, end_hub or hub
+            i: index
+
+        Returns:
+            Dict of each value in line.
+        """
         result = {}
         all_value = value.rsplit('[', 1)
         each_value = all_value[0].split()
@@ -47,7 +85,7 @@ class MapParser():
         if len(all_value) == 2:
             option_value = "".join(all_value[1]).rsplit(']', 1)
             if len(option_value) != 2:
-                raise ParseError(i + 1, ": metadata must be enclosed in "
+                raise ParseError(i + 1, "metadata must be enclosed in "
                                  "brackets: [key=value ...]")
             if len(option_value) == 2 and option_value[1]:
                 raise ParseError(
@@ -73,6 +111,17 @@ class MapParser():
 
     @staticmethod
     def parse_line_connection(value: str, prefix: str, i: int) -> dict:
+        """
+        Parse and validate a connection line.
+
+        Args:
+            value: the line content without the prefix
+            prefix: connection.
+            i: index
+
+        Returns:
+            Dict of each value in line.
+        """
         value_and_metadata = value.rsplit('[', 1)
         connection = value_and_metadata[0].split('-')
         dict_connection = {}
@@ -93,7 +142,7 @@ class MapParser():
         if len(value_and_metadata) == 2:
             metadata_value = "".join(value_and_metadata[1]).rsplit(']', 1)
             if len(metadata_value) != 2:
-                raise ParseError(i + 1, ": metadata must be enclosed in "
+                raise ParseError(i + 1, "metadata must be enclosed in "
                                  "brackets: [key=value ...]")
             if len(metadata_value) == 2 and metadata_value[1]:
                 raise ParseError(i + 1, f"'{prefix}' must be written as "
@@ -110,11 +159,17 @@ class MapParser():
                 k, v = lst_data
                 if k not in key_valid:
                     raise ParseError(i + 1, f"unknown metadata key '{k}': "
-                                     "allowed key are 'max_link_capacity'")
+                                     "allowed key is 'max_link_capacity'")
                 dict_connection[k] = v
         return dict_connection
 
     def parse_input_file(self, file: list) -> None:
+        """
+        Parse and validate every line of the map file.
+
+        Args:
+            file: the lines of the map file.
+        """
         starthub = False
         endhub = False
         nbdrone = False
@@ -141,8 +196,8 @@ class MapParser():
                         dict_nb_drones = {prefix: value}
                         NbDrone(**dict_nb_drones)
                         nbdrone = True
-                        for i in range(int(value)):
-                            drone = Drone(f"D{i + 1}", i + 1)
+                        for j in range(int(value)):
+                            drone = Drone(f"D{j + 1}", j + 1)
                             self.graph.add_drone(drone)
                     except ValidationError as e:
                         raise ParseError(i + 1, e.errors()[0]['msg'])
@@ -152,8 +207,8 @@ class MapParser():
             else:
                 if prefix == 'start_hub':
                     if starthub:
-                        raise ParseError(i + 1, ": duplicate 'start_hub':"
-                                         "exactly one start_hub is allowed")
+                        raise ParseError(i + 1, "duplicate 'start_hub':"
+                                         " exactly one start_hub is allowed")
                     else:
                         starthub = True
                     result = self.parse_line_zone(value, prefix, i)
@@ -171,7 +226,7 @@ class MapParser():
 
                 elif prefix == 'end_hub':
                     if endhub:
-                        raise ParseError(i + 1, ": duplicate 'end_hub': "
+                        raise ParseError(i + 1, "duplicate 'end_hub': "
                                          "exactly one end_hub is allowed")
                     else:
                         endhub = True
@@ -242,7 +297,7 @@ class MapParser():
                     except ValidationError as e:
                         raise ParseError(i + 1, e.errors()[0]['msg'])
                 else:
-                    raise ParseError(i + 1, f": unknown "
+                    raise ParseError(i + 1, "unknown "
                                      f"prefix '{prefix}':"
                                      " only 'nb_drones', 'start_hub', "
                                      "'end_hub', "

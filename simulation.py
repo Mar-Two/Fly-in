@@ -1,142 +1,28 @@
-from models import TypeZone, PrefixZone
+from models import TypeZone
+from structures import Drone, Zone, Connection, Path
 import heapq as hp
 import math
+from visual import Visual
 
 
-class NotPath(Exception):
-    pass
-
-
-class Drone():
-    def __init__(self, name: str, id: int) -> None:
-        self.name = name
-        self.id = id
-        self.state: None | str = ""
-        self.transit: str | None = None
-        self.nbturn = 0
-        self.action = False
-        self.path: dict[str, str] = {}
-
-
-class Path():
-    def __init__(self, path: dict[str, str]) -> None:
-        self.path = path
-        self.id = 0
-        self.nbturn = 0
-        self.throughput: float = 0
-        self.drones: list[Drone] = []
-
-
-class Zone():
-    def __init__(self, prefix: PrefixZone, name: str,
-                 positionx: int, positiony: int,
-                 color: str | None = None, zone: TypeZone = TypeZone.NORMAL,
-                 max_drones: int | None = 1) -> None:
-        self.prefix = prefix
-        self.name = name
-        self.positionx = positionx
-        self.positiony = positiony
-        self.color = color
-        self.zone_type = zone
-        self.max_drones = max_drones
-        self.neighbors: list[str] = []
-        self.accumulator = 0
-
-
-class Connection():
-    def __init__(self, name_zone1: str, name_zone2: str,
-                 max_link_capacity: int = 1) -> None:
-        self.name_zone1 = name_zone1
-        self.name_zone2 = name_zone2
-        self.max_link_capacity = max_link_capacity
-        self.accumulator = 0
-
-
-class Visual():
-    def __init__(self) -> None:
-        self.color: dict[str, int] = {
-            'green': 40,
-            'white': 15,
-            'yellow': 226,
-            'red': 196,
-            'blue': 21,
-            'orange': 214,
-            'gray': 249,
-            'purple': 129,
-            'black': 0,
-            'brown': 52,
-            'maroon': 1,
-            'gold': 220,
-            'cyan': 51,
-            'magenta': 201,
-            'crimson': 88,
-            'violet': 177,
-            'lime': 83,
-            'darkred': 124
-            }
-        self.zonescolor: dict[str, str] = {}
-
-    def listzonepath(self, path: dict[str, str]) -> list:
-        list_zones = []
-        for d, v in path.items():
-            if d not in list_zones:
-                list_zones.append(d)
-            if v not in list_zones:
-                list_zones.append(v)
-        return list_zones[::-1]
-
-    def diplay_paths(self, path: list, zones: dict[str, Zone],
-                     drones: list[Drone]) -> str:
-        state_zones = []
-        for zone in path:
-            list_drones: list[str] = []
-            list_transit: list[str] = []
-            for drone in drones:
-                if drone.state == zone and drone.transit is None:
-                    if not drone.action:
-                        list_drones.append(f"{drone.name}*")
-                    else:
-                        list_drones.append(drone.name)
-                elif drone.transit == zone:
-                    if not drone.action:
-                        list_transit.append(f"{drone.name}*")
-                    else:
-                        list_transit.append(drone.name)
-
-            if zones[zone].prefix == PrefixZone.STARTHUB:
-                string = f"{self.zonescolor[zone]}[{zones[zone].accumulator}]"
-            elif zones[zone].prefix == PrefixZone.ENDHUB:
-                string = (f"-{",".join(list_transit)}> {self.zonescolor[zone]}"
-                          f"[{zones[zone].accumulator}]")
-            else:
-                string = (f"-{",".join(list_transit)}> {self.zonescolor[zone]}"
-                          f"[{zones[zone].accumulator}/"
-                          f"{zones[zone].max_drones}]{",".join(list_drones)}")
-
-            state_zones.append(string)
-        return " ".join(state_zones)
-
-    def display(self, tour: int, path: list[Path], zones: dict[str, Zone],
-                drones: list[Drone], name_end: str) -> None:
-        counter = 0
-        count = 0
-        for drone in drones:
-            if drone.state == name_end:
-                count += 1
-            if drone.action:
-                counter += 1
-        print(f"Turn: {tour}    Drones moved: {counter}    Drones delivered: "
-              f"{count}/{len(drones)}")
-        print("------------------------------------------------------")
-        for p in path:
-            print(f"Path {p.id} (cost {p.nbturn}, throughput {p.throughput})")
-            listzone = self.listzonepath(p.path)
-            print(" ", self.diplay_paths(listzone, zones, drones))
-        print()
+class NoPathFound(Exception):
+    """
+    Path not found error.
+    """
 
 
 class Simulation():
+    """
+    Route a fleet of drones from start_hub to end_hub across multiple paths,
+    under zone and link capacity constraints.
+    """
     def __init__(self, visual: Visual) -> None:
+        """
+        Construct simulation.
+
+        Args:
+            visual: visual renderer for the simulation
+        """
         self.zone: dict[str, Zone] = {}
         self.connections: dict[tuple, Connection] = {}
         self.name_start = ""
@@ -145,9 +31,19 @@ class Simulation():
         self.visual = visual
 
     def add_drone(self, drone: Drone) -> None:
+        """
+        Add a drone to the simulation.
+        """
         self.drones.append(drone)
 
     def add_zone(self, zone: Zone, name_zone: str) -> None:
+        """
+        Add a zone to the simulation and build its colored name.
+
+        Args:
+            zone: object zone
+            name_zone: name of zone
+        """
         self.zone[name_zone] = zone
         color = self.zone[name_zone].color
         if color is not None:
@@ -163,6 +59,12 @@ class Simulation():
                                                  f"{name_zone}\033[0m")
 
     def add_connection(self, connection: Connection) -> None:
+        """
+        Add a connection between two zones to the simulation.
+
+        Args:
+            connection: object connection
+        """
         self.zone[connection.name_zone1].neighbors.append(
             connection.name_zone2)
         self.zone[connection.name_zone2].neighbors.append(
@@ -172,11 +74,18 @@ class Simulation():
         self.connections[tuple(name_sort)] = connection
 
     def assign_zone_start(self) -> None:
+        """Init all drones at start zone."""
         for drone in self.drones:
             drone.state = self.name_start
 
     @staticmethod
     def movement_cost(typezone: TypeZone) -> int:
+        """
+        Return the movement cost of a zone type.
+
+        Returns:
+            cost of the zone type; -1 means the zone is inaccessible.
+        """
         if typezone == TypeZone.NORMAL:
             return 1
         if typezone == TypeZone.PRIORITY:
@@ -187,6 +96,15 @@ class Simulation():
             return -1
 
     def shortest_path(self) -> tuple:
+        """
+        Compute the minimum cost to every zone using Dijkstra.
+
+        Ties are broken in favour of paths crossing more priority zones.
+
+        Returns:
+            previous: contains the predecessors
+            dist: the minimum cost to reach each zone
+        """
         dist: dict[str, float] = {k: float('inf') for k in self.zone}
         nb_prio = {k: 0 for k in self.zone}
         dist[self.name_start] = 0
@@ -220,12 +138,27 @@ class Simulation():
         return (previous, dist)
 
     def all_delivered(self) -> bool:
+        """
+        Check whether every drone has reached the end hub.
+
+        Returns:
+            True if all drones arrived at end hub.
+        """
         for drone in self.drones:
             if drone.state != self.name_end:
                 return False
         return True
 
-    def init_transit_counters(self, paths: list) -> dict:
+    def init_transit_counters(self, paths: list[Path]) -> dict:
+        """
+        Initialise the transit progress counter for every drone and zone.
+
+        Args:
+            paths: list of each path object
+
+        Returns:
+            a dict mapping (drone name, zone) to 0.
+        """
         result = {}
         for path in paths:
             for drone in path.drones:
@@ -235,12 +168,22 @@ class Simulation():
         return result
 
     def extract_paths(self) -> list[Path]:
+        """
+        Extract the possible paths to the end hub,
+        restarting the pathfinding
+        while excluding non-critical zones
+        and keeping the critical ones that allow access to the end hub.
+
+        Stop when a path brings no new zone.
+
+        Returns:
+            a list of valid paths.
+        """
         paths = []
         visited_zones: list[str] = []
         original_types = {}
         idpath = 1
         while True:
-            # Construction des differents chemin
             critical = []
             non_critical = []
 
@@ -284,7 +227,7 @@ class Simulation():
                     break
                 path = Path(new_path)
                 path.id = idpath
-                path.nbturn = dist[self.name_end]
+                path.cost = dist[self.name_end]
                 paths.append(path)
                 idpath += 1
             else:
@@ -294,6 +237,15 @@ class Simulation():
         return paths
 
     def assign_throughput(self, paths: list[Path]) -> None:
+        """
+        Assign the throughput for the various paths by proceeding zone by zone,
+        and taking the minimum value between the link capacity at the origin
+        and the capacity at the destination.
+        When the destination zone is restricted, the link capacity is halved.
+
+        Args:
+            paths: list of object path
+        """
         for path in paths:
             throughput = float('inf')
             for destination, origin in path.path.items():
@@ -319,21 +271,45 @@ class Simulation():
             path.throughput = throughput
 
     def assign_drones_to_paths(self, paths: list) -> None:
+        """
+        Assign each drone to the path with the earliest estimated arrival.
+
+        The estimated arrival turn is path cost plus
+        the queue already assigned, divided by the throughput.
+
+        Args:
+            paths: list of object path
+        """
         for drone in self.drones:
             estimates = []
             for path in paths:
                 estimates.append((path, math.ceil(
-                    path.nbturn + (len(path.drones) / path.throughput))))
+                    path.cost + (len(path.drones) / path.throughput))))
             best_path, turn = min(estimates, key=lambda x: x[1])
             drone.nbturn = turn
             best_path.drones.append(drone)
 
     def assign_paths_to_drones(self, paths: list) -> None:
+        """
+        Store the assigned path on each drone.
+
+        Args:
+            paths: list of object path
+        """
         for path in paths:
             for drone in path.drones:
                 drone.path = path.path
 
     def zone_isfree(self, destination: str) -> bool:
+        """
+        Check whether the destination zone has free capacity.
+
+        Args:
+            destination: name of the destination zone
+
+        Returns:
+            True if the zone can accept another drone.
+        """
         capacity = self.zone[destination].max_drones
         if capacity is None:
             return True
@@ -342,18 +318,34 @@ class Simulation():
         return False
 
     def connection_isfree(self, connection: tuple) -> bool:
-        if (self.connections[tuple(connection)].accumulator <
+        """
+        Check whether the link has free capacity.
+
+        Args:
+            connection: connection between origin and destination
+
+        Returns:
+            True if the link can accept another drone.
+        """
+        if (self.connections[connection].accumulator <
                 self.connections[connection].max_link_capacity):
             return True
         return False
 
     def simulation(self) -> None:
+        """
+        Prepare the simulation by extracting paths and assigning drones,
+        run the rounds until delivery
+        is complete while respecting capacity constraints,
+        and write the turn-by-turn log to log.txt.
+        """
         self.assign_zone_start()
 
         paths = self.extract_paths()
 
         if not paths:
-            raise NotPath("Error: no path found from start_hub to end_hub.")
+            raise NoPathFound("Error: no path found from start_hub "
+                              "to end_hub.")
 
         self.assign_throughput(paths)
 
