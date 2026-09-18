@@ -16,10 +16,13 @@ Requirements: Python 3.10+ and uv.
 ```
 make install
 ```
-
-The project reads a map from the map.txt file at the root of the repository. Edit this file to run the simulation on a different map.
+By default the project reads map.txt at the root of the repository.
 ```
 make run
+```
+A different map can be passed with the MAP variable:
+```
+make run MAP=maps/hard/01_maze_nightmare.txt
 ```
 The colored visualization is printed to the terminal, and the turn-by-turn output follows the required format in log.txt.
 
