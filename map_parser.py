@@ -130,6 +130,8 @@ class MapParser():
                     raise ParseError(i + 1, f"unknown metadata key '{k}': "
                                      "allowed keys are 'zone', 'color' and "
                                      "'max_drones'")
+                elif k in result:
+                    raise ParseError(i + 1, f"duplicate metadata key '{k}'")
                 result[k] = v
         if 'max_drones' in result:
             self.helper_parse_line(result['max_drones'],
@@ -186,6 +188,8 @@ class MapParser():
                 if k not in key_valid:
                     raise ParseError(i + 1, f"unknown metadata key '{k}': "
                                      "allowed key is 'max_link_capacity'")
+                elif k in dict_connection:
+                    raise ParseError(i + 1, f"duplicate metadata key '{k}'")
                 dict_connection[k] = v
         if 'max_link_capacity' in dict_connection:
             self.helper_parse_line(dict_connection['max_link_capacity'],
