@@ -4,11 +4,14 @@ from visual import Visual
 import sys
 
 if __name__ == "__main__":
+    if len(sys.argv) > 1:
+        name_file = sys.argv[1]
+    else:
+        name_file = 'map.txt'
     visual = Visual()
     simulation = Simulation(visual)
-
     try:
-        parser = MapParser('map.txt', simulation)
+        parser = MapParser(name_file, simulation)
         parser.parse_input_file(parser.read_mapfile())
     except ParseError as e:
         print(e)

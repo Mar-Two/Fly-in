@@ -52,8 +52,31 @@ class MapParser():
             raise ParseError(None, str(e))
         return result
 
-    @staticmethod
-    def parse_line_zone(value: str, prefix: str, i: int) -> dict:
+    def helper_parse_line(self, value: str, name: str,
+                          i: int, allow_negative: bool) -> None:
+        """
+        Check that a numeric field contains only digits.
+
+        Args:
+            value: the raw string to check
+            name: name of value
+            i: index of line
+            allow_negative: whether a leading minus sign is accepted
+        """
+        for j, v in enumerate(value):
+            if allow_negative:
+                if j == 0 and v == '-':
+                    continue
+                elif not v.isdigit():
+                    raise ParseError(i + 1, f"'{name}' must be an integer,"
+                                     f" got '{value}'")
+            else:
+                if not v.isdigit():
+                    raise ParseError(i + 1, f"'{name}' must be a positive "
+                                     "integer,"
+                                     f" got '{value}'")
+
+    def parse_line_zone(self, value: str, prefix: str, i: int) -> dict:
         """
         Parse and validate a zone line.
 
@@ -81,7 +104,8 @@ class MapParser():
                 f"'{prefix}: <name '-' and ' ' is forbidden> <int(x)> <int(y)>"
                 " [metadata]'"
                 )
-
+        self.helper_parse_line(result['positionx'], 'positionx', i, True)
+        self.helper_parse_line(result['positiony'], 'positiony', i, True)
         if len(all_value) == 2:
             option_value = "".join(all_value[1]).rsplit(']', 1)
             if len(option_value) != 2:
@@ -107,10 +131,12 @@ class MapParser():
                                      "allowed keys are 'zone', 'color' and "
                                      "'max_drones'")
                 result[k] = v
+        if 'max_drones' in result:
+            self.helper_parse_line(result['max_drones'],
+                                   "max_drones", i, False)
         return result
 
-    @staticmethod
-    def parse_line_connection(value: str, prefix: str, i: int) -> dict:
+    def parse_line_connection(self, value: str, prefix: str, i: int) -> dict:
         """
         Parse and validate a connection line.
 
@@ -161,6 +187,9 @@ class MapParser():
                     raise ParseError(i + 1, f"unknown metadata key '{k}': "
                                      "allowed key is 'max_link_capacity'")
                 dict_connection[k] = v
+        if 'max_link_capacity' in dict_connection:
+            self.helper_parse_line(dict_connection['max_link_capacity'],
+                                   'max_link_capacity', i, False)
         return dict_connection
 
     def parse_input_file(self, file: list) -> None:
@@ -192,8 +221,11 @@ class MapParser():
 
             if count_line == 1:
                 if prefix == 'nb_drones':
+                    dict_nb_drones = {prefix: value}
+                    if not value.isdigit():
+                        raise ParseError(i + 1, "the first line must be "
+                                         "'nb_drones: <positive_integer>'")
                     try:
-                        dict_nb_drones = {prefix: value}
                         NbDrone(**dict_nb_drones)
                         nbdrone = True
                         for j in range(int(value)):

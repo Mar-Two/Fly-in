@@ -74,6 +74,8 @@ Claude (Anthropic) was used in the following ways:
 
 - Since each drone receives its path in advance, it cannot take an alternative route even when one is free. On a test map with two separate exits, drones queued in front of a busy exit while the other stayed empty, because it did not belong to their assigned path. Dynamic rerouting would solve this, at the cost of recomputing assignments during the simulation.
 
+- When the shortest path directly connects start to end, the extraction process does not find an alternative path, since there are no intermediate zones to exclude.
+
 ## Visual representation
 For each turn, the visualization shows the turn number, the number of drones moved and the number of drones delivered.
 
@@ -108,9 +110,9 @@ Colors are not rendered in this file; the actual terminal output is colored.
 Turn: 1    Drones moved: 2    Drones delivered: 0/4
 ------------------------------------------------------
 Path 1 (cost 3, throughput 1)
-  start[0] -> junction[2/2]D3,D4 -> path_a[0/1] -> goal[0]
+  start[2] -> junction[2/2]D3,D4 -> path_a[0/1] -> goal[0]
 Path 2 (cost 3, throughput 1)
-  start[0] -> junction[2/2]D3,D4 -> path_b[0/1] -> goal[0]
+  start[2] -> junction[2/2]D3,D4 -> path_b[0/1] -> goal[0]
 
 Turn: 2    Drones moved: 4    Drones delivered: 0/4
 ------------------------------------------------------

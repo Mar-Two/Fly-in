@@ -1,11 +1,13 @@
+MAP ?= map.txt
+
 install:
 	uv sync
 
 run:
-	uv run main.py
+	uv run main.py $(MAP)
 
 debug:
-	uv run python -m pdb main.py
+	uv run python -m pdb main.py $(MAP)
 
 clean:
 	find . -type d -name "__pycache__" -exec rm -rf {} +

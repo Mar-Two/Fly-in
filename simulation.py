@@ -179,7 +179,7 @@ class Simulation():
         Returns:
             a list of valid paths.
         """
-        paths = []
+        paths: list[Path] = []
         visited_zones: list[str] = []
         original_types = {}
         idpath = 1
@@ -223,7 +223,7 @@ class Simulation():
                           v != self.name_end and v not in visited_zones):
                         visited_zones.append(v)
                         no_new_zone = False
-                if no_new_zone:
+                if paths and no_new_zone:
                     break
                 path = Path(new_path)
                 path.id = idpath
@@ -340,18 +340,21 @@ class Simulation():
         and write the turn-by-turn log to log.txt.
         """
         self.assign_zone_start()
-
+        if self.zone[self.name_start].zone_type == TypeZone.BLOCKED:
+            raise NoPathFound("Error: start_hub is a blocked zone")
+        if self.zone[self.name_end].zone_type == TypeZone.BLOCKED:
+            raise NoPathFound("Error: end_hub is a blocked zone")
         paths = self.extract_paths()
-
         if not paths:
             raise NoPathFound("Error: no path found from start_hub "
                               "to end_hub.")
 
         self.assign_throughput(paths)
-
         self.assign_drones_to_paths(paths)
-
         self.assign_paths_to_drones(paths)
+
+        self.zone[self.name_start].accumulator = len(self.drones)
+        self.zone[self.name_start].max_drones = len(self.drones)
 
         tour = 1
         dict_moved = self.init_transit_counters(paths)
@@ -402,8 +405,8 @@ class Simulation():
                                 dict_moved[(drone.name, destination)] += 1
                                 self.connections[edge_key].accumulator += 1
                             drone.action = True
-
-            simulationlog.append(f"{" ".join(display)}\n")
+            tmp = " ".join(display)
+            simulationlog.append(f"{tmp}\n")
 
             self.visual.display(tour, paths, self.zone, self.drones,
                                 self.name_end)

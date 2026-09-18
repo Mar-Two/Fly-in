@@ -83,12 +83,15 @@ class Visual():
             if zones[zone].prefix == PrefixZone.STARTHUB:
                 string = f"{self.zonescolor[zone]}[{zones[zone].accumulator}]"
             elif zones[zone].prefix == PrefixZone.ENDHUB:
-                string = (f"-{",".join(list_transit)}> {self.zonescolor[zone]}"
+                tmp = ",".join(list_transit)
+                string = (f"-{tmp}> {self.zonescolor[zone]}"
                           f"[{zones[zone].accumulator}]")
             else:
-                string = (f"-{",".join(list_transit)}> {self.zonescolor[zone]}"
+                tmp = ",".join(list_transit)
+                tmp2 = ",".join(list_drones)
+                string = (f"-{tmp}> {self.zonescolor[zone]}"
                           f"[{zones[zone].accumulator}/"
-                          f"{zones[zone].max_drones}]{",".join(list_drones)}")
+                          f"{zones[zone].max_drones}]{tmp2}")
 
             state_zones.append(string)
         return " ".join(state_zones)
